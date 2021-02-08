@@ -1,18 +1,19 @@
 var express = require('express');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+
 var MySQLStore = require('express-mysql-session')(session); 
 var mysql = require('mysql');
 var bkfd2Password = require("pbkdf2-password");
 
-//var SESSION_SQL_options ={                                                
-    //host: 'localhost',
-    //port: 3000,
-    //user: 'root',
-    //password: '159753',
-    //database: 'test'
-//};
-//var sessionStore = new MySQLStore(SESSION_SQL_options);
+var SESSION_SQL_options ={                                                
+    host: 'localhost',
+    port: 3306,
+    user: 'root',
+    password: '159753',
+    database: 'test'
+};
+var sessionStore = new MySQLStore(SESSION_SQL_options);
 
 
 var sql_conn = mysql.createConnection({  //나중에 이부분은 server 기준으로 수정
@@ -23,7 +24,7 @@ var sql_conn = mysql.createConnection({  //나중에 이부분은 server 기준�
   });
 sql_conn.connect()
 var app = express();
-var hasher = bkfd2Password();
+var hasher = bkfd2Password();  //hash 를 통한 암호화
 
 
 app.set('view engine', 'pug');
@@ -34,21 +35,16 @@ app.use(session({
     secret: '#1213215454$%',
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: true },
-    //store : sessionStore
+    store : sessionStore
   }))
 
-
-
 app.get('/form', function(req, res){
-    if(!req.session.ID)  //session 에 id 가 없다면 로그인
-    {
+   if(!req.session.ID){
      res.render('login');
-    }
-    else
-    {
-     res.redirect('/welcome');
-    }
+   }
+   else{
+       res.redirect('/welcome');
+   }
 
   });
 
@@ -65,7 +61,6 @@ app.post('/form_receiver', function(req, res){    //sql 로부터 id pw 검사�
          var password = '';
          while(results[i]){
             if(results[i].IDN == user_IID){
-                 console.log(results[i]);
                  hasher({password : user_IPW , salt : results[i].salt}, function(err, pass, salt, hash){
                     password = hash;
                        })
@@ -73,18 +68,19 @@ app.post('/form_receiver', function(req, res){    //sql 로부터 id pw 검사�
                  {
                      user_checker = true;
                      req.session.ID = user_IID;   /// 세션에 저장
-                     req.session.PW = password;
                      break;
                  }
             }
             i = i+1;
         }
-    if(user_checker){    
-      res.redirect('/welcome');
-    }
-    else{
-      res.redirect('/register');
-    }
+    req.session.save(function(){
+        if(user_checker){    
+            res.redirect('/welcome');
+         }
+        else{
+            res.redirect('/register');
+         }
+    })
 
    })
   });
@@ -92,8 +88,8 @@ app.get('/welcome',function(req,res){
     console.log(req.session.ID);
     //if(req.session.ID){
      res.send('welcome'+req.session.ID);
-    //}
-    //else{                   //잘못된 접근 시 redirect로 로그인화면으로
+   // }
+   // else{                   //잘못된 접근 시 redirect로 로그인화면으로
     // res.redirect('/form');
    // }
    
@@ -173,7 +169,11 @@ app.post('/regit_load', function(req, res){    //sql 로부터 id 중복 검사�
          var sql = 'INSERT INTO topic(IDN , PW , salt) VALUES(?,?,?)';///  암호비교를 위한 salt 값 저장이 필요
          sql_conn.query(sql,user,function(error, results, fields){
             if (error) throw error;
-            res.redirect('/welcome')
+            req.session.ID = user_IID; 
+            req.session.save(function(){
+               res.redirect('/welcome')
+            })
+            
          })
 
         }
